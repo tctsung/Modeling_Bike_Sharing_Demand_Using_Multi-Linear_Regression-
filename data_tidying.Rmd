@@ -1,0 +1,93 @@
+---
+title: "Final Project Report"
+author: "Ching-Tsung(Deron) Tsai"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**source of data**
+
+- UCI Machine Learning Repository [Bike Sharing Dataset](https://archive.ics.uci.edu/ml/datasets/Bike+Sharing+Dataset?fbclid=IwAR3uiFUh-wHIXccZQAMOIoPsDfru40yv8Lnuh-1n2D7x1oyTsUPcpAq-X4k)
+
+```{r library, warning=FALSE, message=FALSE}
+## Packages
+library(tidyverse)   # data manipulation & ggplot
+library(gridExtra)   # to arrange ggplot
+library(DT)          # better table view
+```
+
+
+## Introduction
+
+Bike sharing system is one of the most trending ways for communication and traveling due to its flexibility and convenience. According to Wikipedia, there are currently more than 500 bike sharing system worldwide in more than 1000 cities. This generates a big market and rises peoples’ interest in analyzing the customers preference in bike rental. In this project, we utilize multi-linear regression, a statistical method for predicting continuous outcome based on two or more input variables, to predict the count of total rental bikes per hour in UCI Bike Sharing Data set. The outline could be broadly separated to descriptive statistics, three common methods for multi-linear modeling, and a series of regression diagnostics for evaluating model performance.
+
+- keywords: multi-linear regression, regression diagnosis
+
+## Analysis Part 1: Descriptive Statistics
+
+### Introduction of Data Set
+
+The [Bike Sharing Dataset](https://archive.ics.uci.edu/ml/datasets/Bike+Sharing+Dataset?fbclid=IwAR3uiFUh-wHIXccZQAMOIoPsDfru40yv8Lnuh-1n2D7x1oyTsUPcpAq-X4k) is obtained from UCI Machine Learning Repository. It contains 17389 samples, 17 variables and no missing values. The raw data is shown in table 1.
+
+```{r data_summary, echo=FALSE}
+# Input data
+raw.data <- read_csv("data/hour.csv")  
+raw.data <- as.data.frame(raw.data)
+datatable(head(raw.data),caption = "Table 1")
+```
+
+### Data tidying
+
+We selected cnt (count of total rental bikes per hour) as dependent variable. Variable instant was removed because it’s simply an identification number. Variable casual and registered, which respectively represents counts of registered and casual bike rentals, were removed since they are highly associated with outcome (registered + casual = cnt). Predictors that have more than 5 groups were considered as continuous variables while the opposite were transformed to R factor. Date were transformed to numeric variable (which is default to be the number of dates since 1970-01-01 in R) because linear regression model couldn’t utilize date datatype. We ended up with 5 categorical variables (year, season, weathersit, working day, holiday) and 8 continuous variables (date, month, hour, weekday, temp, atemp, humidity, windspeed). The cleaned data is shown in table 2 of our attached codes
+
+```{r data_manipulation}
+# data manipulation:
+clean_data <- raw.data %>%       
+  mutate_at(vars(yr, season, weathersit, workingday, holiday), as.factor) %>%  # turn variables to factor
+  mutate_at(vars(dteday), as.numeric) %>%   # turn date to numeric
+  dplyr::select(cnt, yr, season, weathersit, workingday, holiday,
+         everything(),-c(instant, casual, registered))
+```
+```{r table2, echo=FALSE}
+datatable(head(clean_data),caption = "Table2")
+```
+
+### Data visualization and regrouping
+
+The outcome cnt is highly right-skewed (Fig. 1), we may consider outcome transformation in future steps. Weathersit is the only variable with obvious unbalanced categories (Fig. 2); group4(Heavy rain | Thunderstorm) only has 3 samples, therefore we merged them into the group3(Light Rain | Light Snow). We visualized the number of bike rentals in a time-dependent manner. (eg. hour, month and season) We noticed two peaks of cnt at around 7to 9am, and 4to 7pm (Fig. 3). Bike rentals from June to September was higher comparing to other months, which was consistent with the outcomes of season vs. cnt(Fig. 4).
+
+```{r visualization, echo=FALSE}
+print("Summary statistics of outcome: ")
+summary(clean_data$cnt)
+
+# sorted outcome plot
+ggplot(raw.data)+  
+  geom_histogram(aes(x=sort(cnt)), bins=100, alpha=.8) +
+  ggtitle("Fig. 1: Highly right-skewed distribution of outcome cnt")
+
+# weathersit plot
+raw.data %>% 
+  mutate(weathersit=recode_factor(weathersit, `1`="Clear", `2`="Mist | Cloudy", `3`="Light Rain | Light Snow", `4`="Heavy rain | Thunderstorm")) %>%
+  ggplot() +
+  geom_bar(aes(x=weathersit)) +
+  ggtitle("Fig. 2: Distribution of unbalanced categorical data weathersit")
+# regroup
+clean_data$weathersit <- as.factor(ifelse(clean_data$weathersit==4,3,clean_data$weathersit))
+
+# time vs. cnt
+ggplot(clean_data) +
+  geom_point(aes(x=hr, y=cnt)) +
+  ggtitle("Fig 3. Number of bike rentals against hour")
+gm <- ggplot(clean_data) +
+  geom_boxplot(aes(x=as.factor(mnth), y=cnt))
+gs <- ggplot(clean_data) +
+  geom_boxplot(aes(x=season, y=cnt)) 
+grid.arrange(gm,gs, nrow=2, top="Fig 4. Comparison of outcome cnt against month and season")
+saveRDS(clean_data, file = "bike_clean_data.Rds")
+```

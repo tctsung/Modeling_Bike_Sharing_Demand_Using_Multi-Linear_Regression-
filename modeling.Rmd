@@ -1,0 +1,133 @@
+---
+title: "Final Project Report"
+author: "Ching-Tsung(Deron) Tsai"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r library, warning=FALSE, message=FALSE}
+## Packages
+library(tidyverse)   # data manipulation & ggplot
+library(leaps)       # AIC exhaustive search
+library(faraway)     # VIF calculation & leverage point/outlier identification
+library(ggcorrplot)  # visualize correlation
+library(olsrr)       # Stepwise regression
+library(DT)          # better table view
+```
+
+### dataset spliting
+
+A 70-30 data spliting was performed in this case.
+
+```{r train}
+clean_data <- readRDS("data/bike_clean_data.Rds")
+set.seed(10)
+k <- sample(1:nrow(clean_data),floor(0.7*nrow(clean_data)))
+df <- clean_data[k,]
+test <- clean_data[-k,]
+# saveRDS(df, "training.Rds")
+# saveRDS(test, "testing.Rds")
+```
+
+### Correlation and independency testing
+
+We were aware that predictors may be highly associated according to their definition (eg. month and season, temperature and feeling temperature). Hence, we conducted correlation testing for continuous variables (Fig. 5), Pearson’s chi-squared test for independence for categorical variables (data not shown, too many combinations), and calculate the VIF for a model with all continuous predictors. Season was transformed to continuous temporarily to compare it to months and other time related variables. As our expectation, (atemp and temp), (mnth and season and date) are strongly correlated
+
+```{r correlation, echo=FALSE}
+# df for correlation testing
+df.corr <- df %>%       
+  mutate_at(vars(yr, weathersit, workingday, holiday), as.factor) %>%
+  mutate_at(vars(dteday, season), as.numeric) %>%
+  dplyr::select(cnt, yr, weathersit, workingday, holiday, everything())
+
+## correlation testing for continuous variables
+corr <- cor(df.corr[,c(6:length(df.corr))])         # correlation
+cor.p <- cor_pmat(corr)       # the p-value of correlation
+ggcorrplot(corr,  hc.order = TRUE, lab = T, type = "lower", lab_size = 3.5, p.mat = cor.p) +
+  ggtitle("Fig. 3: Number of bike rentals against hour")
+
+print("VIF of model with all variables")
+round(vif(lm(cnt~., df)),2)
+
+print("variables with VIF > 10")
+vif(lm(cnt~., df.corr[,c(1,7:length(df.corr))]))
+```
+
+## Analysis Part 1: Multi-linear Modeling
+
+### Model establishment using exhaustive search and AIC as criteria
+
+For the first method, we demonstrated application of AIC with the aid of `leaps` package. We exhaustively searched for all possible combinations of the predictors, and sorted out the top 2 models with greatest goodness-of-fit for each size of model. The model almost reaches lowest AIC at size 8 (Fig. 6), therefore we compared the performance of models from size 6 to 8, and avoided the collinearity issues from the results of previous sections. Since all models have similar R^2, adjusted R^2, AIC, BIC, we chose the simplest model temp + hr + hum + season + yr as the optimal model.
+
+**variable selection record:**
+
+  1: temp, atemp
+  
+  2: temp/atemp + hr
+  
+  3: temp/atemp + hr + yr
+  
+  4: temp/atemp + hr + dteday + hum
+  
+  5: temp/atemp + hr + hum + season + yr
+  
+  6: temp + hr + hum + seasonS + yr
+  
+  7: temp + hr + hum + seasonS + yr + weathersit
+  
+  8: temp + hr + hum + seasonS + yr + weathersit + weekday | holiday
+
+```{r AIC, echo=FALSE}
+# exhaustive search & AIC as criteria for variable number selection
+b <- regsubsets(cnt~., data = df, nvmax =13 ,nbest = 2)
+rs <- summary(b)
+n <- nrow(df)  # number of observation
+AIC <- n*log(rs$rss/n) + rep(2:14,each=2)*2  # == p+1
+plot(rep(1:13,each=2), AIC, xlab = "Variable number")
+
+# model comparison of variable number 6-8
+lmod <- lm(cnt~temp + hr + hum + season + yr, df)
+lmod2 <- lm(cnt~temp + hr + hum + season + yr + weathersit, df)
+lmod3 <- lm(cnt~temp + hr + hum + season + yr + weathersit + holiday, df) 
+
+# nested model comparison
+anova(lmod, lmod2)         # F-test always prefer the larger model
+anova(lmod, lmod3)
+anova(lmod2, lmod3)
+
+# criterion comparison
+cri_compare <- data.frame(
+  c(summary(lmod)$adj.r.squared, summary(lmod2)$adj.r.squared,summary(lmod3)$adj.r.squared),
+  AIC(lmod,lmod2,lmod3)$AIC,
+  BIC(lmod,lmod2,lmod3)$BIC) 
+
+dimnames(cri_compare) <- list(c("model1", "model2", "model3"), c("Radj","AIC","BIC"))
+cri_compare     # similar adjusted R^2, AIC, BIC
+
+## Conclusion:
+#  similar result, select the simplest model
+lm.1 <- lm(cnt~temp + hr + hum + season + yr , df)
+# saveRDS(lm.1, "model1.Rds")
+```
+
+### Model establishment using Stepwise Regression
+
+For the second method, we conducted stepwise regression using `olsrr` package. Thresholds were set to 0.05 for forward selection and 0.1 for backward selection. After stepwise selection using all variables, temp and atemp were both selected. To avoid collinearity issue, we repeated stepwise selection without temp or without atemp and compared the performance of the two. Model without atemp has higher adjusted R-squared. We used similar method to select one variable from hr, hum and one from mnth, season, dteday. We concluded that removing atemp, hum, mnth and dteday leads to greatest adjusted R- squared, and chose temp + hr + season + yr + weathersit + windspeed + weekday as the optimal model. Model selected by AIC method is denoted as lm1. Models selected by stepwise regression were renamed to lm2.
+
+```{r stepwise}
+# Stepwise Regression with Full model
+ols_step_both_p(lm(cnt ~ ., data = df))
+# demonstration of stepwise regression modeling without collinearity issue:
+ols_step_both_p(lm(cnt ~ . -atemp, data = df)) # without atemp
+ols_step_both_p(lm(cnt ~ . -temp, data = df))  # without temp
+
+# Stepwise Regression of optimal model
+lm.2 <- lm(cnt ~ temp + hr + season + yr + weathersit + windspeed + weekday, data = df)
+# saveRDS(lm.2, "model2.Rds")
+```

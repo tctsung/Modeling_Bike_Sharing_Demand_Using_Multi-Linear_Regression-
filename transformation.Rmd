@@ -1,0 +1,147 @@
+---
+title: "Final Project Report"
+author: "Ching-Tsung(Deron) Tsai"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r library, warning=FALSE, message=FALSE}
+## Packages
+library(tidyverse)   # data manipulation & ggplot
+library(faraway)     # VIF calculation & leverage point/outlier identification
+library(MASS)        # box-cox transformation
+library(DT)          # better table view
+```
+
+```{r data}
+df <- readRDS("data/training.Rds")
+test <- readRDS("data/testing.Rds")
+lm.1 <- readRDS("data/model1.Rds")
+lm.2 <- readRDS("data/model2.Rds")
+```
+
+
+## Analysis Part 4: Model Optimization
+
+### Model with interaction
+
+To discovered interaction between variables, we use a loop to compare all possible combinations. A easy to achieved criteria(if the R^2 of model with interaction is 1% more than the sum of two simple linear regression, pass the threshold) is set, and 6 combinations (shown in below codes) were sorted out. We found that season * humidity have greatest interaction(R^2: season alone-0.066, humidity alone- 0.104, season*humidity- 0.214). After interpreting the model, we concluded that 0.01 increase in humidity leads to 1.24 person less bike rental demand, and the impact of humidity in summer is greatest(0.01 increase causes 4.97 person decrease), following by fall(0.01 increase causes 3.85 person decrease), spring(0.01 increase causes 3.78 person decrease), and winter(0.01 increase causes 1.24 person decrease). We added the interaction term to lm1 according to anova testing though the adjusted R^2 increase(0.3940 to 0.4036) wasn't obvious.
+
+```{r interaction}
+# sort out potential interaction combinations 
+for (i in 2:14){
+  for (j in 2:14){
+    if (i < j){     # use < to avoid repetition
+      x1 <- paste(colnames(df)[i],colnames(df)[j], sep = "*")
+      lm.a <- summary(lm(cnt~df[,i], df))
+      lm.b <- summary(lm(cnt~df[,j], df))
+      lm.mix <- summary(lm(cnt~df[,i]*df[,j], df))
+      if (lm.a$adj.r.squared + lm.b$adj.r.squared < lm.mix$adj.r.squared-0.01){
+        print(x1)
+      }}}}
+summary(lm(cnt~season*hum, df))
+
+lm1.interaction <- lm(cnt ~ temp + hr + yr + season + hum + season:hum, data=df)
+# summary(lm1.interaction)
+anova(lm.1, lm1.interaction)
+```
+
+### Models with polynomial
+
+Polynomial regression was performed for all remaining variables, and the only one that has improvement is hour. To see if there's a smooth relationship, we visualize outcome versus hour by a scatter plot, and observed two major peaks which may represents the rush hour in Fig 11. We kept adding polynomials and stop at 9 degree according to the variable significance. However, we were also concerned about over fitting in the 9 degree polynomial, and this requires further diagnostic.
+
+```{r poly}
+# R^2 for different polynomial degree in hr
+for (i in 1:9){
+  x1 <- summary(lm(cnt ~ poly(hr,i), df))
+  cat("Model: cnt ~ hr^",i,"\n", "adjusted R^2: " ,round(x1$r.squared,3), "\n" )
+}
+
+# scatter plot
+# blue: smooth line, red: hr^4, green: hr^9
+ggplot(df,mapping = aes(x=hr , y=cnt))+
+  geom_point(size = 0.3, alpha=.8) +
+  geom_smooth() +
+  geom_smooth(method = "lm", formula = y~poly(x,4),col="red")+
+  geom_smooth(method = "lm", formula = y~poly(x,9),col="green")+
+  xlab("Hour") +
+  ggtitle(" Fig 11: Number of bike rentals against hour ")
+```
+
+
+### Outcome transformation
+
+We demonstrated Box-cox transformation for lm1 and lm2, but we discovered that the result may not be credible because 4.89% and 4.90% of the fitted values were negative. We forced to turn the prediction to positive by adding a constant 200, and got a much higher adjusted R^2 by the transformation(Fig 12. lambda=-0.75). However, the model was highly unstable even by doing linear transformation. Therefore, we decided not to adopt box-cox transformation result. On the otherhand, we performed log transformation due to the skewness in previous section(Fig 1.) The outcome distribution appears to be much more normally distributed(Fig. 13), and the adjusted R^2 became much better(lm1: 0.5307 to 0.6697, lm2: 0.5358 to 0.6825). This is our final modification of the model.
+
+```{r transformation, echo=FALSE}
+print("lm1 fitted values < 0")
+table(lm.1$fitted.values<0) # fitted values < 0 in lm1
+print("lm2 fitted values < 0")
+table(lm.2$fitted.values<0) # fitted values < 0 in lm2
+
+# to make predicted y > 0:
+lm1.box <- lm(I(cnt+200) ~ temp + hr + yr + season + hum, data=df)
+lm2.box <- lm(I(cnt+200) ~ temp + hr + yr + season +weathersit +windspeed+weekday, df)
+
+par(mfrow=c(1,2))
+boxcox(lm1.box,plotit = T, data=df, lambda = seq(-0.7, -0.8, by=-.01))
+mtext("Fig 12. Box-cox transformation")
+boxcox(lm2.box,plotit = T, data=df, lambda = seq(-0.7, -0.8, by=-.01))
+
+# log transformation
+ggplot(df)+
+  geom_histogram(aes(x=sort(log(cnt))), bins=100, alpha=.8) +
+  ggtitle("Fig 13: Outcome distribution after log-transformation")
+
+# final models:
+lm1 <- lm(log(cnt) ~ temp + poly(hr,4) + yr + season + hum + season:hum, data=df)
+lm2 <- lm(log(cnt) ~ temp + poly(hr,4) + yr + season +weathersit +windspeed+weekday, df)
+lm.opt <- lm(log(cnt) ~ temp + poly(hr,4) + yr + season +weathersit, df)
+cri_final <- round(data.frame(
+  c(summary(lm.1)$adj.r.squared, summary(lm.2)$adj.r.squared, summary(lm1)$adj.r.squared,
+    summary(lm2)$adj.r.squared,summary(lm.opt)$adj.r.squared),
+  AIC(lm.1, lm.2, lm1,lm2,lm.opt)$AIC,
+  BIC(lm.1, lm.2, lm1,lm2,lm.opt)$BIC),3)
+dimnames(cri_final) <- list(c("model1","model2","transformed1", "transformed2", "final"), c("Radj","AIC","BIC"))
+datatable(cri_final, caption = "Table 3") 
+```
+
+### Final model selection and diagnostic
+
+We subsequently compared several criteria(Table 3) to select one of lm1 and lm2 after transformation, and lm2 have slightly better performance in all criteria. Variable `windspeed` and `weekday` were removed due to their negligible contribution. Consequently, our final selection is `cnt ~ temp + poly(hr,4) + yr + season +weathersit`(labeled as lm.opt).
+
+We checked the final model and found the normality became better(Fig. 15); the scatter of the constant variance became more equally but still not ideal(Fig. 14), we may consider other types of distribution for this regression problem in the future.
+```{r}
+# Check the variance assumption
+final_residual_dat <- data.frame(residual=residuals(lm.opt), fitted = fitted(lm.opt))
+ggplot(final_residual_dat) +
+  geom_point(aes(x=fitted, y=residual),size=0.5) +
+  ggtitle("Fig 14. Fitted values vs. Residuals- lm.opt")
+# Check the normality assumption -> looks better
+qqnorm(scale(lm.opt$residuals), main = "Fig 15. normal Q-Q plot- lm.opt")
+qqline(scale(lm.opt$residuals))
+# Check the normality of the residuals
+shapiro.test(sample(final_residual_dat$residual,5000,replace = F)) 
+```
+
+## Summary
+
+Our final model is shown by the following formula. $$ e^{3.4+1.1 temp +(33.5hr4 - 36.6hr3 -61.4hr2 +89.5hr)+0.48(year is 2012)+0.48spring+0.49summer+0.60fall-0.06mist-0.65rainy}$$ The adjusted R^2 of our final model is 0.6834 with 11 degree of freedom. The fitted value of the final model is shown in Fig. 14. We can conclude that hour & temperature have the greatest positive impact on biking demand; the average bike rental was about 1.5 times more in 2012 than 2011; there’s around 0.5 times bike rentals in rainy day comparing to sunny day. The main obstacle of our analysis is the highly right-skewed outcome. This may be the reason of the negative prediction at the beginning. We also noticed a mispredicted subgroup in Fig. 16, which looked worthy of further investigation.
+
+
+```{r final_result, echo=FALSE}
+summary(lm.opt)
+# actual vs prediction
+pred <- predict(lm.opt, new = test, interval = "prediction")
+ggplot(test,mapping = aes(x=exp(pred[,1]), y=cnt))+
+  geom_point(size = 0.3, alpha=.8) +
+  xlab("Predicted value") +
+  ylab("Actual value") +
+  ggtitle("Fig 16-2. Testing data predicted values vs. observed values") 
+```

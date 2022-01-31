@@ -1,0 +1,113 @@
+---
+title: "Final Project Report"
+author: "Ching-Tsung(Deron) Tsai"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r library, warning=FALSE, message=FALSE}
+## Packages
+library(tidyverse)   # data manipulation & ggplot
+library(gridExtra)   # to arrange ggplot
+library(faraway)     # VIF calculation & leverage point/outlier identification
+library(DT)          # better table view
+```
+
+```{r data}
+df <- readRDS("data/training.Rds")
+lm.1 <- readRDS("data/model1.Rds")
+lm.2 <- readRDS("data/model2.Rds")
+```
+
+
+## Analysis Part 3: Diagnostic
+
+### Diagnostic: Constant variance, Normality and Collinearity   
+
+To check whether errors have equal variance and are normally distributed, we examined the residuals in several ways. The variance of errors seemed proportional to the square of the mean due to the "fan" shape in the residuals (Fig. 7). This indicated serious heteroscedasticity. We made a quantile-quantile plot with residuals to check the normality of the models. The plot showed skewed distribution (Fig. 8). The outcomes of Shapiro-Wilk normality test rejected the null, which were another evidence of non-normality of the residuals. The VIFs in lm1 and lm2 were all smaller than 10. This gave us confidence that the chosen models have improved the collinearity issue.
+
+```{r normality}
+## Constant variance:
+residual_data1 <- data.frame(residual=residuals(lm.1),
+                             fitted_value_lm1=fitted(lm.1))
+residual_data2 <- data.frame(residual=residuals(lm.2),
+                             fitted_value_lm2=fitted(lm.2))
+cv1 <- ggplot(residual_data1) +
+  geom_point(aes(x=fitted_value_lm1, y=residual), size=0.5) +
+  geom_hline(yintercept=0, col="red") 
+cv2 <- ggplot(residual_data2) +
+  geom_point(aes(x=fitted_value_lm2, y=residual), size=0.5) +
+  geom_hline(yintercept=0, col="red") 
+grid.arrange(cv1,cv2,nrow=1, top="Fig. 7: Residuals vs. fitted values")
+## Normality diagnosis:
+par(mfrow=c(1,2))
+qqnorm(scale(lm.1$residuals), main = "Fig. 8: Q-Q plot for residuals")
+qqline(scale(lm.1$residuals)) 
+qqnorm(scale(lm.2$residuals),main = "")
+qqline(scale(lm.2$residuals))
+# Check the normality of the residuals, randomly select 5000 
+# because it's the max number for default shapiro test
+shapiro.test(sample(residuals(lm.1),5000,replace = F))  
+shapiro.test(sample(residuals(lm.2),5000,replace = F)) 
+# reject the null -> non-normality
+
+# collinearity diagnosis
+vif(lm.1) 
+vif(lm.2) 
+```
+
+### Diagnostics: Leverage points, Outliers and Influential points
+
+To exclude unusual observation, we adopted four methods to identify leverage points, outliers and potential influential points in our dataset. There are quite a few large leverage points by rule of thumbs, yet we didn’t find any pattern on the leverage points in two models. 1 outlier was found in model 1 and none in model 2 after we computed the studentized residuals. Last but not least, we found two influential points in both models using Cooks statistics (Fig. 10). Removing the influential points or large leverage points only showed negligible impact on the coefficients. Therefore, we kept all observations in the dataset.
+
+```{r outlier}
+### Check Leverage points
+lm1.p <- length(lm.1$coefficients)
+lm2.p <- length(lm.2$coefficients)
+threshold_lm1 <- 2 * lm1.p / nrow(df) 
+threshold_lm2 <- 2 * lm2.p / nrow(df) 
+# rule of thumb: hat > 2 * p / n should be look carefully
+hatv_lm1 <- hatvalues(lm.1)
+table(hatv_lm1 < threshold_lm1)  # 87 large leverage points
+hatv_lm2 <- hatvalues(lm.2)
+table(hatv_lm2 < threshold_lm2)  # 141 large leverage points
+par(mfrow=c(1,2))
+halfnorm(hatv_lm1, ylab = "Leverages") 
+mtext("Fig. 9: Half-normal plot for the leverages ")
+halfnorm(hatv_lm2, ylab = "Leverages") 
+# according to faraways's half normal plot, there are 2 large leverage points
+
+## Check outliers by using studentized residuals: none
+nrow(df[rstudent(lm.1) > abs(qt(0.05 / (nrow(df) * 2), (nrow(df) - lm1.p - 1))), ])
+nrow(df[rstudent(lm.2) > abs(qt(0.05 / (nrow(df) * 2), (nrow(df) - lm2.p - 1))), ])
+
+### Check influential points by Cooks statistics
+influence_lm1 <- cooks.distance(lm.1)
+influence_lm2 <- cooks.distance(lm.2)
+par(mfrow=c(1,2))
+halfnorm(influence_lm1) # two points
+mtext("Fig. 10: Half-normal plot based on Cooks statistics")
+halfnorm(influence_lm2)
+# change of coef.
+# lm1:
+lm1_lev <- lm(cnt ~ hr + temp + hum + season + yr, df[hatv_lm1 < threshold_lm1,])
+lm1_outlier <- lm(cnt ~ hr + temp + hum + season + yr, 
+                  df[influence_lm1 < max(influence_lm1),])
+data.frame(original_coef = summary(lm.1)$coefficients[,1], 
+           coef_without_outlier = summary(lm1_outlier)$coefficients[,1],
+           coef_without_large_leverage=summary(lm1_lev)$coefficients[,1])
+# lm2:
+lm2_lev <- lm(cnt ~ temp + hr + season + yr + weathersit + windspeed + weekday,
+              df[hatv_lm2 < threshold_lm2,])
+lm2_outlier <- lm(cnt ~ temp + hr + season + yr + weathersit + windspeed + weekday,
+                  df[influence_lm2 < max(influence_lm2),])
+data.frame(original_coef = summary(lm.2)$coefficients[,1] , 
+           coef_without_outlier = summary(lm2_outlier)$coefficients[,1],
+           coef_without_large_leverage=summary(lm2_lev)$coefficients[,1])
+```
