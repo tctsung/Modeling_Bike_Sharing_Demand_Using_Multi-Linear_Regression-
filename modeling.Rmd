@@ -1,5 +1,5 @@
 ---
-title: "Final Project Report"
+title: "Modeling_Bike_Sharing_Demand_Using_Multi-Linear_Regression"
 author: "Ching-Tsung(Deron) Tsai"
 output: 
   html_document:
