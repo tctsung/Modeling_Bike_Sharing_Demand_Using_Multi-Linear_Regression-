@@ -7,6 +7,17 @@ Bike sharing system is one of the most trending ways for communication and trave
 - keywords: multi-linear regression, regression diagnosis
 
 
+* [Data tidying](https://github.com/tctsung/Modeling_Bike_Sharing_Demand_Using_Multi-Linear_Regression-/blob/main/data_tidying.Rmd)
+  * Data cleaning and descriptive statistics
+* [Regression modeling](https://github.com/tctsung/Modeling_Bike_Sharing_Demand_Using_Multi-Linear_Regression-/blob/main/modeling.Rmd)
+  * Established multi-linear model by exhaustive search or stepwise selection  
+  * Using AIC, BIC, adjusted R^2 as criteria with correlation and VIF-based feature selection 
+* [Diagnosis](https://github.com/tctsung/Modeling_Bike_Sharing_Demand_Using_Multi-Linear_Regression-/blob/main/diagnosis.Rmd)
+  * Included content: constant variance, normality, collinearity, leverage points, outliers and influential points
+* [Transformation](https://github.com/tctsung/Modeling_Bike_Sharing_Demand_Using_Multi-Linear_Regression-/blob/main/transformation.Rmd)
+  * model with interaction and polynomial
+  * outcome log-transformation and box-cox transformation
+   
 **contributors**
 
 - Ching-Tsung (Deron) Tsai
