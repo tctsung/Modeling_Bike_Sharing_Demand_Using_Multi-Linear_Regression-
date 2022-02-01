@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Bike sharing system is one of the most trending ways for communication and traveling due to its flexibility and convenience. According to Wikipedia, there are currently more than 500 bike sharing system worldwide in more than 1000 cities. This generates a big market and rises peoples’ interest in analyzing the customers preference in bike rental. In this project, we utilize multi-linear regression, a statistical method for predicting continuous outcome based on two or more input variables, to predict the count of total rental bikes per hour in UCI Bike Sharing Data set. The outline could be broadly separated to descriptive statistics, two common methods for multi-linear modeling, a series of detailed regression diagnostics, and model transformation.
+Bike sharing system is one of the most trending ways for communication and traveling due to its flexibility and convenience. According to Wikipedia, there are currently more than 500 bike sharing system worldwide in more than 1000 cities. This generates a big market and rises peoples’ interest in analyzing the customers preference in bike rental. In this project, we utilize multi-linear regression, a statistical method for predicting continuous outcome based on two or more input variables, to predict the count of total rental bikes per hour in [UCI Bike Sharing](https://archive.ics.uci.edu/ml/datasets/bike+sharing+dataset) Data set. The outline could be broadly separated to descriptive statistics, two common methods for multi-linear modeling, a series of detailed regression diagnostics, and model transformation.
 
 - keywords: multi-linear regression, regression diagnosis
 
