@@ -17,14 +17,6 @@ Bike sharing system is one of the most trending ways for communication and trave
 * [Transformation](https://github.com/tctsung/Modeling_Bike_Sharing_Demand_Using_Multi-Linear_Regression-/blob/main/transformation.Rmd)
   * model with interaction and polynomial
   * outcome log-transformation and box-cox transformation
-   
-**contributors**
-
-- Ching-Tsung (Deron) Tsai
-- Shu-Han (Suzy) Wang
-- Yu-Ju (Christine) Wang
-
-This project is origninated and derived from course GPH-GU 2353  Regression I: Linear Regression and Modeling at NYU GPH
 
 **source of data**
 
